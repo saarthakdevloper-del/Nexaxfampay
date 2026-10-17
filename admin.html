@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"><meta name="theme-color" content="#0284c7">
+<title>NexaXFam Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{--p:#0284c7;--pd:#0369a1;--bg:#f4faff;--card:#fff;--t:#0b2540;--tl:#5b7288;--b:#dbeaf5;--red:#dc2626;--green:#16a34a}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--t);font-size:14px;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+h1,h2,.num{font-family:'Outfit',sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.top h1{font-size:22px}.top small{color:var(--tl)}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:14px;padding-bottom:4px}
+.tabs button{flex:none;min-height:44px;padding:0 16px;border:1.5px solid var(--b);background:var(--card);border-radius:12px;font:600 14px inherit;font-family:inherit;color:var(--tl);cursor:pointer}
+.tabs button.on{background:var(--p);border-color:var(--p);color:#fff}
+.card{background:var(--card);border:1px solid var(--b);border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(11,37,64,.06)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px}
+.stat .num{font-size:28px;font-weight:700}.stat span{color:var(--tl);font-size:12px}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:620px}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--b);font-size:13px;white-space:nowrap}th{color:var(--tl);font-weight:600}
+input,select{width:100%;min-height:46px;padding:0 12px;border:1.5px solid var(--b);border-radius:12px;font:16px inherit;font-family:inherit;background:#fbfdff;color:var(--t)}
+label{display:block;font-weight:600;font-size:13px;margin:10px 0 5px}
+.btn{min-height:44px;padding:0 16px;border:0;border-radius:12px;background:var(--p);color:#fff;font:700 14px inherit;font-family:inherit;cursor:pointer}
+.btn:hover{background:var(--pd)}.btn.s{min-height:34px;padding:0 12px;font-size:12px}.btn.r{background:var(--red)}.btn.g{background:#e8f5fd;color:var(--pd)}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700}.pill.ok{background:#dcfce7;color:#15803d}.pill.no{background:#fee2e2;color:#b91c1c}.pill.ad{background:#e0f2fe;color:#0369a1}
+.msg{padding:10px 12px;border-radius:10px;background:#fee2e2;color:#991b1b;margin:10px 0;display:none}.msg.on{display:block}
+#login{max-width:400px;margin:12vh auto 0}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:560px){.row{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body><div class="wrap">
+<div id="login" class="card"><h1>NexaXFam Admin</h1><p style="color:var(--tl);margin:4px 0 8px">Sign in with an admin account.</p>
+<div class="msg" id="lm"></div><label>Email</label><input id="em" type="email" autocomplete="username"><label>Password</label><input id="pw" type="password" autocomplete="current-password">
+<button class="btn" style="width:100%;margin-top:14px" onclick="doLogin()">Sign in</button></div>
+<div id="app" style="display:none">
+<div class="top"><div><h1>NexaXFam Admin</h1><small id="who"></small></div><button class="btn g s" onclick="out()">Logout</button></div>
+<div class="tabs" id="tabs"></div><div id="view"></div></div></div>
+<script type="module">
+import { firebaseConfig } from './firebase-config.js';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, collectionGroup, getDocs } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+const auth = getAuth(initializeApp(firebaseConfig)), db = getFirestore(auth.app), $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const inr = n => '₹' + (+n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+let users = [], txs = [], apps = 0, tab = 'overview';
+const TABS = { overview: 'Overview', users: 'Users', txns: 'Transactions', settings: 'Settings' };
+window.doLogin = async () => { try { await signInWithEmailAndPassword(auth, $('em').value.trim(), $('pw').value); } catch (e) { m('Wrong email or password'); } };
+window.out = () => signOut(auth);
+const m = t => { $('lm').textContent = t; $('lm').classList.add('on'); };
+onAuthStateChanged(auth, async u => {
+  if (!u) { $('login').style.display = ''; $('app').style.display = 'none'; return; }
+  const p = await getDoc(doc(db, 'users', u.uid)).catch(() => null);
+  if (!p || !p.exists() || p.data().role !== 'admin') { await signOut(auth); m('This account is not an admin.'); return; }
+  $('login').style.display = 'none'; $('app').style.display = ''; $('who').textContent = u.email; await load(); draw();
+});
+async function load() {
+  users = (await getDocs(collection(db, 'users'))).docs.map(d => ({ id: d.id, ...d.data() }));
+  txs = (await getDocs(collectionGroup(db, 'transactions'))).docs.map(d => ({ uid: d.ref.parent.parent.id, ...d.data() })).sort((a, b) => String(b.payment_time_ist).localeCompare(String(a.payment_time_ist)));
+  apps = (await getDocs(collectionGroup(db, 'apps'))).size;
+}
+const email = id => (users.find(u => u.id === id) || {}).email || id;
+window.go = t => { tab = t; draw(); };
+window.blk = async (id, v) => { await updateDoc(doc(db, 'users', id), { blocked: v }); await load(); draw(); };
+window.role = async (id, r) => { if (confirm('Change role to ' + r + '?')) { await updateDoc(doc(db, 'users', id), { role: r }); await load(); draw(); } };
+window.addTx = async () => {
+  const u = $('tu').value, utr = $('tx').value.trim(), amt = +$('ta').value; if (!u || !utr || !amt) return alert('User, UTR and amount required');
+  await setDoc(doc(db, 'users', u, 'transactions', utr), { utr, amount: amt, gateway: $('tg').value, sender_name: $('ts').value.trim() || 'Unknown', transaction_id: $('ti').value.trim(), payment_time_ist: new Date().toISOString() });
+  await load(); draw();
+};
+window.save = async () => {
+  await setDoc(doc(db, 'settings', 'global'), { notice: $('sn').value.trim(), support_telegram: $('st').value.trim(), updated_at: new Date().toISOString() }, { merge: true }); alert('Saved');
+};
+async function draw() {
+  $('tabs').innerHTML = Object.entries(TABS).map(([k, v]) => `<button class="${k === tab ? 'on' : ''}" onclick="go('${k}')">${v}</button>`).join('');
+  let h = '';
+  if (tab === 'overview') {
+    const total = txs.reduce((a, t) => a + (+t.amount || 0), 0), day = new Date().toISOString().slice(0, 10), td = txs.filter(t => String(t.payment_time_ist).startsWith(day));
+    h = `<div class="grid">${[['Users', users.length], ['Blocked', users.filter(u => u.blocked).length], ['Connected apps', apps], ['Transactions', txs.length], ['Volume', inr(total)], ['Today', inr(td.reduce((a, t) => a + (+t.amount || 0), 0))]].map(([a, b]) => `<div class="card stat"><span>${a}</span><div class="num">${b}</div></div>`).join('')}</div>
+    <div class="card"><b>Latest transactions</b><div class="tw">${txTable(txs.slice(0, 8))}</div></div>`;
+  } else if (tab === 'users') {
+    h = `<div class="card tw"><table><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th></th></tr>${users.map(u => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td><span class="pill ${u.role === 'admin' ? 'ad' : 'ok'}">${esc(u.role)}</span></td><td><span class="pill ${u.blocked ? 'no' : 'ok'}">${u.blocked ? 'blocked' : 'active'}</span></td><td>${esc((u.created_at || '').slice(0, 10))}</td><td><button class="btn s ${u.blocked ? 'g' : 'r'}" onclick="blk('${u.id}',${!u.blocked})">${u.blocked ? 'Unblock' : 'Block'}</button> <button class="btn s g" onclick="role('${u.id}','${u.role === 'admin' ? 'user' : 'admin'}')">${u.role === 'admin' ? 'Remove admin' : 'Make admin'}</button></td></tr>`).join('')}</table></div>`;
+  } else if (tab === 'txns') {
+    h = `<div class="card"><b>Add transaction manually</b><div class="row"><div><label>User</label><select id="tu">${users.map(u => `<option value="${u.id}">${esc(u.email)}</option>`).join('')}</select></div><div><label>Gateway</label><select id="tg"><option>fampay</option><option>paytm</option><option>bharatpe</option></select></div><div><label>UTR / Order ID</label><input id="tx"></div><div><label>Amount</label><input id="ta" type="number" inputmode="decimal"></div><div><label>Sender name</label><input id="ts"></div><div><label>Transaction ID</label><input id="ti"></div></div><button class="btn" style="margin-top:12px" onclick="addTx()">Add</button></div><div class="card tw">${txTable(txs)}</div>`;
+  } else {
+    const s = (await getDoc(doc(db, 'settings', 'global'))).data() || {};
+    h = `<div class="card"><label>Site notice (optional)</label><input id="sn" value="${esc(s.notice)}"><label>Support Telegram username</label><input id="st" value="${esc(s.support_telegram)}"><button class="btn" style="margin-top:14px" onclick="save()">Save settings</button></div>`;
+  }
+  $('view').innerHTML = h;
+}
+const txTable = l => l.length ? `<table><tr><th>UTR</th><th>User</th><th>App</th><th>Sender</th><th>Amount</th><th>Time</th></tr>${l.map(t => `<tr><td>${esc(t.utr)}</td><td>${esc(email(t.uid))}</td><td>${esc(t.gateway)}</td><td>${esc(t.sender_name)}</td><td>${inr(t.amount)}</td><td>${esc((t.payment_time_ist || '').replace('T', ' ').slice(0, 16))}</td></tr>`).join('')}</table>` : '<p style="color:var(--tl);padding:12px 0">No transactions yet.</p>';
+</script></body></html>

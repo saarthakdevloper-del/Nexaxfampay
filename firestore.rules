@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && get(/databases/$(db)/documents/users/$(request.auth.uid)).data.role == 'admin'; }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.role == 'user' && request.resource.data.blocked == false;
+      allow update: if signedIn() && ((request.auth.uid == uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])) || isAdmin());
+      match /apps/{g} { allow read, write: if signedIn() && (request.auth.uid == uid || isAdmin()); }
+      match /transactions/{t} { allow read: if signedIn() && (request.auth.uid == uid || isAdmin()); allow write: if isAdmin(); }
+    }
+    match /{path=**}/transactions/{t} { allow read: if isAdmin(); }
+    match /{path=**}/apps/{g} { allow read: if isAdmin(); }
+    match /apiKeys/{k} {
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+    match /settings/{d} { allow read: if true; allow write: if isAdmin(); }
+  }
+}

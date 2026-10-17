@@ -1,0 +1,14 @@
+{
+  "firestore": { "rules": "firestore.rules" },
+  "functions": { "source": ".", "runtime": "nodejs20", "ignore": ["node_modules", "*.html", "fb-api.js", "firebase-config.js", "firebase.json", "firestore.rules", "README.md"] },
+  "hosting": {
+    "public": ".",
+    "ignore": ["firebase.json", "firestore.rules", "index.js", "package.json", "package-lock.json", "README.md", "node_modules/**", "**/.*"],
+    "rewrites": [
+      { "source": "/api/verify", "function": "verify" },
+      { "source": "/api/qr", "function": "qr" },
+      { "source": "/api/qr_img", "function": "qr_img" },
+      { "source": "/api/ingest", "function": "ingest" }
+    ]
+  }
+}
